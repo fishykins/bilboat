@@ -1,40 +1,33 @@
-use std::path::Path;
 #[cfg(feature = "encryption")]
 use crate::aes_siv::*;
-use crate::{key_to_seed, Encrypt};
+use crate::{key_to_seed, Encryption, WavBuffer};
+use hound::WavWriter;
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rand::{seq::SliceRandom, Rng};
+use std::io::{Cursor, Read, Seek};
 
-/// Embeds a binary message into randomly selected LSBs of PCM samples. If an encryption method is provided, it will be implimented. 
+/// Embeds a binary message into randomly selected LSBs of PCM samples. If an encryption method is provided, it will be implimented.
 /// Otherwise, the default encryption will be applied (unless the crate feature "encryption" is disabled, in which case plain text is used).
-pub fn embed_message<P: AsRef<Path>>(
-    original_wav: P,
-    output_wav: P,
+pub fn embed_message<R: Read + Seek + Clone>(
+    wav: &WavBuffer<R>,
     message: &str,
     key: &str,
-    encryption: Option<Encrypt>,
-) {
-    let mut reader = hound::WavReader::open(original_wav).expect("Failed to open WAV file");
-    let spec = reader.spec();
-    let mut samples: Vec<i16> = reader.samples::<i16>().map(|s| s.unwrap()).collect();
+    encryption: Encryption,
+) -> Result<WavBuffer<Cursor<Vec<u8>>>, String> {
+    let spec = wav.clone().get_spec().expect("Failed to read WAV specs");
+    let mut samples: Vec<i16> = wav.read_samples().expect("Failed to read WAV samples");
 
     let seed = key_to_seed(key);
     let mut rng = StdRng::seed_from_u64(seed);
     let mut indices: Vec<usize> = (0..samples.len()).collect();
     indices.shuffle(&mut rng);
 
-    let encrypted_message: String = if let Some(encryption) = encryption {
-        encryption(message, key)
-    } else {
+    let encrypted_message: String = match encryption {
+        Encryption::None => message.to_string(),
         #[cfg(feature = "encryption")]
-        {
-            encrypt_aes_siv(message, key)
-        }
-        #[cfg(not(feature = "encryption"))]
-        {
-            message.to_string()
-        }
+        Encryption::AesSiv => encrypt_aes_siv(message, key),
+        Encryption::Custom(encryption) => encryption(message, key),
     };
 
     let mut message_bits = encrypted_message
@@ -55,8 +48,15 @@ pub fn embed_message<P: AsRef<Path>>(
         }
     }
 
-    let mut writer = hound::WavWriter::create(output_wav, spec).expect("Failed to create WAV file");
-    for sample in samples {
-        writer.write_sample(sample).unwrap();
+    // Write to an in-memory buffer instead of a file
+    let mut buffer = Vec::new();
+    {
+        let mut writer =
+            WavWriter::new(Cursor::new(&mut buffer), spec).map_err(|e| e.to_string())?;
+        for sample in samples {
+            writer.write_sample(sample).unwrap();
+        }
     }
+
+    Ok(WavBuffer::new(Cursor::new(buffer)))
 }

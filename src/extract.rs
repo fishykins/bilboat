@@ -1,18 +1,18 @@
-use std::path::Path;
 #[cfg(feature = "encryption")]
 use crate::aes_siv::*;
-use crate::encryption::Decrypt;
+use crate::{encryption::Encryption, WavBuffer};
 use crate::key_to_seed;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
 use rand::SeedableRng;
+use std::io::{Read, Seek};
 
 /// Extracts a binary message by using the key to determine embedding positions.
-/// If an decryption method is provided, it will be implimented. 
+/// If an decryption method is provided, it will be implimented.
 /// Otherwise, the default decryption will be applied (unless the crate feature "encryption" is disabled, in which case the plain text will be returned).
-pub fn extract_message<P: AsRef<Path>>(wav: P, key: &str, decryption: Option<Decrypt>,) -> String {
-    let mut wav_reader = hound::WavReader::open(wav).expect("Failed to open WAV");
-    let samples: Vec<i16> = wav_reader.samples::<i16>().map(|s| s.unwrap()).collect();
+pub fn extract_message<R: Read + Seek + Clone>(wav: &WavBuffer<R>, key: &str, decryption: Encryption) -> String {
+    let samples: Vec<i16> = wav.read_samples().expect("Failed to read WAV samples");
+
     let seed = key_to_seed(key);
     let mut rng = StdRng::seed_from_u64(seed);
     let mut indices: Vec<usize> = (0..samples.len()).collect();
@@ -36,18 +36,11 @@ pub fn extract_message<P: AsRef<Path>>(wav: P, key: &str, decryption: Option<Dec
     }
 
     let encryption = String::from_utf8_lossy(&bytes).to_string();
-    if let Some(unencryption) = decryption {
-        return unencryption(&encryption, key);
+
+    match decryption {
+        Encryption::None => encryption.to_string(),
+        #[cfg(feature = "encryption")]
+        Encryption::AesSiv => decrypt_aes_siv(&encryption, key),
+        Encryption::Custom(method) => method(&encryption, key),
     }
-
-    #[cfg(feature = "encryption")]
-        {
-            decrypt_aes_siv(&encryption, key)
-        }
-        #[cfg(not(feature = "encryption"))]
-        {
-            encryption
-        }
-    
-
 }

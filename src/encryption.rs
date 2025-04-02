@@ -1,5 +1,26 @@
-pub type Encrypt = fn(message: &str, key: &str) -> String;
-pub type Decrypt = fn(encryption: &str, key: &str) -> String;
+pub enum Encryption {
+    /// Plain text
+    None,
+    /// Default AES-Siv encryption
+    #[cfg(feature = "encryption")]
+    AesSiv,
+    /// Custom encryption method
+    Custom(fn(message: &str, key: &str) -> String),
+}
+
+#[cfg(feature = "encryption")]
+impl Default for Encryption {
+    fn default() -> Self {
+        Encryption::AesSiv
+    }
+}
+#[cfg(not(feature = "encryption"))]
+impl Default for Encryption {
+    fn default() -> Self {
+        Encryption::None
+    }
+}
+
 
 #[cfg(feature = "encryption")]
 pub mod aes_siv {
@@ -73,6 +94,11 @@ pub mod aes_siv {
         // Decode from Base64
         let data = safe_base64_decode(encrypted, key);
 
+        if data.len() < 16 {
+            // Bad decrypt- not enough data to form a solid nonce/cipher so just return. 
+            return String::from_utf8_lossy(&data).to_string();
+        }
+        
         // Split into nonce and ciphertext
         let (nonce, ciphertext) = data.split_at(16);
 
