@@ -1,6 +1,7 @@
+use std::path::Path;
 #[cfg(feature = "encryption")]
 use crate::aes_siv::*;
-use crate::encryption::Unencrypt;
+use crate::encryption::Decrypt;
 use crate::key_to_seed;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -9,7 +10,7 @@ use rand::SeedableRng;
 /// Extracts a binary message by using the key to determine embedding positions.
 /// If an decryption method is provided, it will be implimented. 
 /// Otherwise, the default decryption will be applied (unless the crate feature "encryption" is disabled, in which case the plain text will be returned).
-pub fn extract_message(wav: &str, key: &str, unencryption: Option<Unencrypt>,) -> String {
+pub fn extract_message<P: AsRef<Path>>(wav: P, key: &str, decryption: Option<Decrypt>,) -> String {
     let mut wav_reader = hound::WavReader::open(wav).expect("Failed to open WAV");
     let samples: Vec<i16> = wav_reader.samples::<i16>().map(|s| s.unwrap()).collect();
     let seed = key_to_seed(key);
@@ -35,7 +36,7 @@ pub fn extract_message(wav: &str, key: &str, unencryption: Option<Unencrypt>,) -
     }
 
     let encryption = String::from_utf8_lossy(&bytes).to_string();
-    if let Some(unencryption) = unencryption {
+    if let Some(unencryption) = decryption {
         return unencryption(&encryption, key);
     }
 

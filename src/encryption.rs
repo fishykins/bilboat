@@ -1,5 +1,5 @@
 pub type Encrypt = fn(message: &str, key: &str) -> String;
-pub type Unencrypt = fn(encryption: &str, key: &str) -> String;
+pub type Decrypt = fn(encryption: &str, key: &str) -> String;
 
 #[cfg(feature = "encryption")]
 pub mod aes_siv {

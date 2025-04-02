@@ -1,3 +1,4 @@
+use std::path::Path;
 #[cfg(feature = "encryption")]
 use crate::aes_siv::*;
 use crate::{key_to_seed, Encrypt};
@@ -7,9 +8,9 @@ use rand::{seq::SliceRandom, Rng};
 
 /// Embeds a binary message into randomly selected LSBs of PCM samples. If an encryption method is provided, it will be implimented. 
 /// Otherwise, the default encryption will be applied (unless the crate feature "encryption" is disabled, in which case plain text is used).
-pub fn embed_message(
-    original_wav: &str,
-    output_wav: &str,
+pub fn embed_message<P: AsRef<Path>>(
+    original_wav: P,
+    output_wav: P,
     message: &str,
     key: &str,
     encryption: Option<Encrypt>,
