@@ -3,7 +3,7 @@ mod encryption;
 mod extract;
 
 pub use embed::embed_message;
-pub use encryption::Encrypt;
+pub use encryption::*;
 pub use extract::extract_message;
 use sha2::{Digest, Sha256};
 

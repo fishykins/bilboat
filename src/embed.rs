@@ -1,10 +1,12 @@
+#[cfg(feature = "encryption")]
+use crate::aes_siv::*;
+use crate::{key_to_seed, Encrypt};
 use rand::rngs::StdRng;
 use rand::SeedableRng;
 use rand::{seq::SliceRandom, Rng};
 
-use crate::{key_to_seed, Encrypt};
-
-/// Embeds a binary message into randomly selected LSBs of PCM samples.
+/// Embeds a binary message into randomly selected LSBs of PCM samples. If an encryption method is provided, it will be implimented. 
+/// Otherwise, the default encryption will be applied (unless the crate feature "encryption" is disabled, in which case plain text is used).
 pub fn embed_message(
     original_wav: &str,
     output_wav: &str,
@@ -21,10 +23,17 @@ pub fn embed_message(
     let mut indices: Vec<usize> = (0..samples.len()).collect();
     indices.shuffle(&mut rng);
 
-    let encrypted_message = if let Some(encryption) = encryption {
-        &encryption(message, key)
+    let encrypted_message: String = if let Some(encryption) = encryption {
+        encryption(message, key)
     } else {
-        message
+        #[cfg(feature = "encryption")]
+        {
+            encrypt_aes_siv(message, key)
+        }
+        #[cfg(not(feature = "encryption"))]
+        {
+            message.to_string()
+        }
     };
 
     let mut message_bits = encrypted_message
