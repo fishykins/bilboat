@@ -1,13 +1,10 @@
-mod embed;
 mod encryption;
-mod extract;
 mod wav_buffer;
 
-pub use embed::embed_message;
 pub use encryption::*;
-pub use extract::extract_message;
-pub use wav_buffer::*;
+use rand::{rngs::StdRng, seq::SliceRandom, SeedableRng};
 use sha2::{Digest, Sha256};
+pub use wav_buffer::*;
 
 /// Converts a string key into a numeric seed using SHA-256 hashing.
 pub(crate) fn key_to_seed(key: &str) -> u64 {
@@ -15,28 +12,29 @@ pub(crate) fn key_to_seed(key: &str) -> u64 {
     u64::from_le_bytes(hash[..8].try_into().unwrap())
 }
 
+/// Creates a vec of shuffled indices.
+pub(crate) fn shuffle_indices(key: &str, length: usize) -> Vec<usize> {
+    let seed = key_to_seed(key);
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut indices: Vec<usize> = (0..length).collect();
+    indices.shuffle(&mut rng);
+    indices
+}
+
 #[cfg(test)]
 mod tests {
     use crate::*;
 
     #[test]
-    fn test_embed_and_extract_message_correct_key() {
-        let secret_message = "Hello, Rust!";
-        let key = "super_secret_passphrase";
+    fn test_wav_buffer() {
+        let mut buffer = WavBuffer::sin(1);
+        let bytes: Vec<u8> = vec![1, 2, 3, 4, 5, 6];
 
-        let wav = WavBuffer::sin(1);
+        buffer.embed_bytes(&bytes, "key").unwrap();
 
-        let buffer = embed_message(
-            &wav,
-            secret_message,
-            key,
-            Encryption::None,
-        ).unwrap();
+        buffer.read_samples().unwrap();
 
-        let extracted = extract_message(&buffer, key, Encryption::None);
-        assert_eq!(extracted, secret_message);
-
-        let extracted_wrong = extract_message(&buffer, "wrong_key", Encryption::None);
-        assert_ne!(extracted_wrong, secret_message);
+        let extracted = buffer.extract_bytes("key").unwrap();
+        assert_eq!(bytes, extracted);
     }
 }
