@@ -26,7 +26,7 @@ mod tests {
     use crate::*;
 
     #[test]
-    fn test_wav_buffer() {
+    fn test_wav_buffer_read_write() {
         let mut buffer = WavBuffer::sin(1);
         let bytes: Vec<u8> = vec![1, 2, 3, 4, 5, 6];
 
@@ -36,5 +36,16 @@ mod tests {
 
         let extracted = buffer.extract_bytes("key").unwrap();
         assert_eq!(bytes, extracted);
+    }
+
+    #[test]
+    fn test_wav_buffer_wrong_key() {
+        let mut buffer = WavBuffer::sin(1);
+        let bytes: Vec<u8> = vec![1, 2, 3, 4, 5, 6];
+
+        buffer.embed_bytes(&bytes, "key").unwrap();
+
+        let extracted = buffer.extract_bytes("wrong_key").unwrap();
+        assert_ne!(bytes, extracted);
     }
 }

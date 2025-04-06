@@ -5,7 +5,7 @@ use std::{
     io::{Cursor, Read, Seek, Write},
 };
 
-use crate::shuffle_indices;
+use crate::{shuffle_indices, Encryption};
 
 fn default_spec() -> WavSpec {
     WavSpec {
@@ -23,6 +23,8 @@ pub struct WavBuffer<P: Read + Seek + Clone> {
     pub buffer: P,
     /// Audio specs (from hound)
     pub spec: Option<WavSpec>,
+    /// Encryption method
+    pub encyrption: Encryption,
 }
 
 /// The most common type of WavBuffer
@@ -47,6 +49,7 @@ impl WavBuffer<Cursor<Vec<u8>>> {
         Self {
             buffer: Cursor::new(buffer),
             spec: Some(spec),
+            encyrption: Default::default(),
         }
     }
 
@@ -70,6 +73,14 @@ impl WavBuffer<Cursor<Vec<u8>>> {
         let mut samples = self.read_samples()?;
         // get a shuffled array of every possible sample we can use.
         let indices = shuffle_indices(key, samples.len());
+
+        // Handle any encryption before converting to bits.
+        let bytes = match self.encyrption {
+            Encryption::None => bytes.clone(),
+            #[cfg(feature = "encryption")]
+            Encryption::Default => crate::aes_siv::encrypt_aes_siv(bytes, key),
+            Encryption::Custom(f) => f(bytes, key),
+        };
 
         // Count the number of bytes to embed
         let byte_count = bytes.len();
@@ -132,6 +143,14 @@ impl WavBuffer<Cursor<Vec<u8>>> {
             .map(|chunk| chunk.iter().fold(0, |acc, &b| (acc << 1) | b))
             .collect();
 
+        // Handle any decryption
+        let bytes = match self.encyrption {
+            Encryption::None => bytes.clone(),
+            #[cfg(feature = "encryption")]
+            Encryption::Default => crate::aes_siv::decrypt_aes_siv(&bytes, key),
+            Encryption::Custom(f) => f(&bytes, key),
+        };
+
         Ok(bytes)
     }
 }
@@ -142,6 +161,16 @@ impl<P: Read + Seek + Clone> WavBuffer<P> {
         Self {
             buffer,
             spec: Some(default_spec()),
+            encyrption: Default::default(),
+        }
+    }
+
+    /// Adds an encryption layer to the buffer.
+    pub fn with_encryption(self, encryption: Encryption) -> Self {
+        Self {
+            buffer: self.buffer,
+            spec: self.spec,
+            encyrption: encryption,
         }
     }
 
